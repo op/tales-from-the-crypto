@@ -142,33 +142,28 @@ const findScheme = (schemes, category, protocol, version) =>
       (version === undefined || scheme.version === version),
   );
 
-const serializeSchemes = (schemes) =>
-  schemes.map(serializeScheme);
+const serializeSchemes = (schemes) => schemes.map(serializeScheme);
 
 const serializeScheme = ({ encryptedKey, nonce, createdAt, ...key }) => ({
-    key: createCipherPrefix(key, nonce) + sodium.to_base64(encryptedKey),
-    createdAt,
-  });
+  key: cipherPrefix(key, nonce) + sodium.to_base64(encryptedKey),
+  createdAt,
+});
 
 const serializePrimaryKey = ({ protocol, version, key }) =>
-  createCipherPrefix(
-    {
-      protocol,
-      category: CATEGORY_PRIMARY,
-      version,
-    },
+  cipherPrefix(
+    { protocol, category: CATEGORY_PRIMARY, version },
     '', // primary key does not have a nonce
   ) + sodium.to_base64(key);
 
-// createCipherPrefix creates a prefix suitable to prepend to a
+// cipherPrefix creates a prefix suitable to prepend to a
 // ciphertext to make it easier to decrypt the cipher in the future.
 //
 // The format is eg: $29k1$category$1$nonce.
-const createCipherPrefix = ({ protocol, category, version }, nonce) =>
+const cipherPrefix = ({ protocol, category, version }, nonce) =>
   ['', protocol, category, version, sodium.to_base64(nonce), ''].join('$');
 
 const marshallEncrypted = (scheme, nonce, ciphertext) =>
-  createCipherPrefix(scheme, nonce) + sodium.to_base64(ciphertext);
+  cipherPrefix(scheme, nonce) + sodium.to_base64(ciphertext);
 
 const unmarshallEncrypted = (value) => {
   const [
@@ -266,7 +261,12 @@ async function main() {
   // This need to be sorted on version and / or creation date.
   const schemes = [await generateScheme(primary, CATEGORY_JOURNALING, 1)];
 
-  const encrypted = await step1(plaintext, primary, schemes, CATEGORY_JOURNALING);
+  const encrypted = await step1(
+    plaintext,
+    primary,
+    schemes,
+    CATEGORY_JOURNALING,
+  );
   const decrypted = await step2(encrypted, primary, schemes);
 
   // this is the data that will be stored in the database
