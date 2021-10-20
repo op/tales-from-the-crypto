@@ -6,21 +6,19 @@ Proof of concept; encryption based on user password.
 
 > TODO: improve terminology
 
-> TODO: do not use "master". Primary?
-
  * primary   -- the primary key (with a protocol)
  * chain    -- a set of "secrets" for categories
  * category -- a category separates secrets into sub groups
- * secret   -- a specific encryption key (encrypted with the master key)
+ * secret   -- a specific encryption key (encrypted with the primary key)
                for a specific category, protocol and version
 ## PROTOCOL
 
 The protocol flow looks like this:
 
 1. Fetch user's salt from server
-2. Derive master key from user password and salt
-3. Store master key ("remember me")
-4. Generate "category key", encrypt with random nonce and master key
+2. Derive primary key from user password and salt
+3. Store primary key ("remember me")
+4. Generate "category key", encrypt with random nonce and primary key
 5. Upload used nonce and encrypted key
 
 Used algorithm:

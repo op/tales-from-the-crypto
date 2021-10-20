@@ -6,12 +6,11 @@
 // TERMINOLOGY
 //
 // TODO: define terminology better. this is what's current:
-// TODO: use another terminology than master. Primary?
 //
-// master   -- the master key (with a protocol)
+// primary   -- the primary key (with a protocol)
 // chain    -- a set of "secrets" for categories
 // category -- a category separates secrets into sub groups
-// secret   -- a specific encryption key (encrypted with the master key)
+// secret   -- a specific encryption key (encrypted with the primary key)
 //             for a specific category, protocol and version
 //
 // PROTOCOL
@@ -19,9 +18,9 @@
 // The protocol flow looks like this:
 //
 // 1. Fetch user's salt from server
-// 2. Derive master key from user password and salt
-// 3. Store master key ("remember me")
-// 4. Generate "category key", encrypt with random nonce and master key
+// 2. Derive primary key from user password and salt
+// 3. Store primary key ("remember me")
+// 4. Generate "category key", encrypt with random nonce and primary key
 // 5. Upload used nonce and encrypted key
 //
 // Used algorithm:
@@ -58,7 +57,7 @@ const MEM_LIMIT = 64 * 1024 * 1024;
 // any knobs for it like operation and memory limits.
 const PROTOCOL_VERSION_1 = '29k1';
 
-const CATEGORY_MASTER = '0';
+const CATEGORY_PRIMARY = '0';
 
 // CATEGORY_JOURNALING is an example cateogry. Ciphertext will contain
 // the category to allow us to have different keys for different
@@ -80,7 +79,7 @@ const deriveKeyFromPassword = async (password, salt) => {
     sodium.crypto_pwhash_ALG_ARGON2ID13,
   );
   const time = ((performance.now() - start) / 1e3).toPrecision(3);
-  console.log(`Generated master key in ${time}s.`);
+  console.log(`Generated primary key in ${time}s.`);
   return key;
 };
 
@@ -137,31 +136,31 @@ const decrypt = async (ciphertext, nonce, { protocol, key }) => {
 };
 
 // createChainSecret generates a new encryption key and encrypts it
-// using the master key, and finally wraps it with nonce, protocol
+// using the primary key, and finally wraps it with nonce, protocol
 // version, key version and the category which this key is used for.
 //
-// The encryption key is encrypted using the master key. Once encrypted,
+// The encryption key is encrypted using the primary key. Once encrypted,
 // it is referred to as "secret".
-const createChainSecret = async (master, category, version) => {
+const createChainSecret = async (primary, category, version) => {
   const nonce = await generateNonce();
   const key = await generateKey();
-  // TODO: do we gain anything by encrypting "chain nonce" with master key
+  // TODO: do we gain anything by encrypting "chain nonce" with primary key
   return {
     protocol: PROTOCOL_VERSION_1,
     version,
     category,
     nonce,
-    encryptedKey: await encrypt(key, nonce, master),
+    encryptedKey: await encrypt(key, nonce, primary),
     createdAt: new Date().toISOString(),
   };
 };
 
-// decryptChainSecret decrypts a chain secret using the master key.
-const decryptChainSecret = async (master, chainSecret) => {
+// decryptChainSecret decrypts a chain secret using the primary key.
+const decryptChainSecret = async (primary, chainSecret) => {
   const { encryptedKey, nonce, ...rest } = chainSecret;
   return {
     ...rest,
-    key: await decrypt(encryptedKey, nonce, master),
+    key: await decrypt(encryptedKey, nonce, primary),
     nonce,
   };
 };
@@ -182,14 +181,14 @@ const serializeKeyChain = (chain) =>
     createdAt,
   }));
 
-const serializeMasterKey = ({ protocol, version, key }) =>
+const serializePrimaryKey = ({ protocol, version, key }) =>
   createCipherPrefix(
     {
       protocol,
-      category: CATEGORY_MASTER,
+      category: CATEGORY_PRIMARY,
       version,
     },
-    '', // master key does not have a nonce
+    '', // primary key does not have a nonce
   ) + sodium.to_base64(key);
 
 // createCipherPrefix creates a prefix suitable to prepend to a
@@ -224,20 +223,20 @@ const unmarshallEncrypted = (value) => {
 };
 
 // step1 is an example of how to encrypt things
-const step1 = async (plaintext, master, chain, category) => {
+const step1 = async (plaintext, primary, chain, category) => {
   const secret = findChainSecret(chain, CATEGORY_JOURNALING);
 
   const nonce = await generateNonce();
   const encrypted = await encrypt(
     plaintext,
     nonce,
-    await decryptChainSecret(master, secret),
+    await decryptChainSecret(primary, secret),
   );
   return marshallEncrypted(secret, nonce, encrypted);
 };
 
 // step2 is an example of how to decrypt things
-const step2 = async (marshalled, master, chain) => {
+const step2 = async (marshalled, primary, chain) => {
   const {
     protocol,
     category,
@@ -254,7 +253,7 @@ const step2 = async (marshalled, master, chain) => {
   const bytes = await decrypt(
     ciphertext,
     nonce,
-    await decryptChainSecret(master, secret),
+    await decryptChainSecret(primary, secret),
   );
   return sodium.to_string(bytes);
 };
@@ -268,21 +267,21 @@ async function main() {
   await sodium.ready;
   const salt = args[0] ? sodium.from_base64(args[0]) : await generateSalt();
 
-  // master key derived from password. Never leaves the user's device
+  // primary key derived from password. Never leaves the user's device
   // and will be stored as secure as possible:
   // - iOS uses key chain sharing
   // - Android Keystore (where available)
-  // TODO: use salt to obfuscate master key stored in local storage?
-  const master = {
+  // TODO: use salt to obfuscate primary key stored in local storage?
+  const primary = {
     protocol: PROTOCOL_VERSION_1,
     version: 1,
-    category: CATEGORY_MASTER,
+    category: CATEGORY_PRIMARY,
     key: await deriveKeyFromPassword(password, salt),
   };
 
   console.log('*** local device');
   console.log('data', {
-    master: serializeMasterKey(master),
+    primary: serializePrimaryKey(primary),
   });
 
   // chain contains all content encryption secrets.
@@ -293,16 +292,16 @@ async function main() {
   // handles that for us.)
   //
   // This need to be sorted on version and / or creation date.
-  const chain = [await createChainSecret(master, CATEGORY_JOURNALING, 1)];
+  const chain = [await createChainSecret(primary, CATEGORY_JOURNALING, 1)];
 
-  const encrypted = await step1(plaintext, master, chain, CATEGORY_JOURNALING);
-  const decrypted = await step2(encrypted, master, chain);
+  const encrypted = await step1(plaintext, primary, chain, CATEGORY_JOURNALING);
+  const decrypted = await step2(encrypted, primary, chain);
 
   // this is the data that will be stored in the database
   console.log('*** remote database');
   // user database
   console.log('user', {
-    master: { protocol: PROTOCOL_VERSION_1, salt: sodium.to_base64(salt) },
+    primary: { protocol: PROTOCOL_VERSION_1, salt: sodium.to_base64(salt) },
     chain: serializeKeyChain(chain),
   });
   // example "entries" collection, can really be anything
