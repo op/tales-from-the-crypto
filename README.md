@@ -17,8 +17,8 @@ The protocol flow looks like this:
 
 1. Fetch user's salt from server
 2. Derive primary key from user password and salt
-3. Store primary key ("remember me")
-4. Generate "category key", encrypt with random nonce and primary key
+3. Store primary key on local device (for "remember me")
+4. Generate "chain secret" for category (encrypt with random nonce and primary key)
 5. Upload used nonce and encrypted key
 
 Used algorithm:
