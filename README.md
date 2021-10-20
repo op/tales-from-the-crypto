@@ -34,3 +34,28 @@ Alternative algorithms:
 * Values can be copied / moved from one "database entry" to another.
    There is nothing in the "additional" data that binds it to a
    specific entry, only to a specific protocol version.
+
+## Example
+
+```
+$ ./index.js 6v78rQHoefeqOPTubwFNNA
+Generated primary key in 0.780s.
+*** local device
+data { primary: '$29k1$0$1$$-hQbC3g54I-HkqjmlxKdYmWuMwM3l0AkMf1yNYwZ1pc' }
+*** remote database
+user {
+  primary: { protocol: '29k1', salt: '6v78rQHoefeqOPTubwFNNA' },
+  chain: [
+    {
+      key: '$29k1$j$1$eWDp4bT3uvGp8eW_fNLq4GaoEzw_axKB$jExMAJLnqMe5L10qsN4AsAg4P4hQQsH1Z2e7ZVwApxef76ra57GWGHDbEynMn4TF',
+      createdAt: '2021-10-20T20:57:58.878Z'
+    }
+  ]
+}
+entries {
+  value: '$29k1$j$1$-3QCtjQGLm4f1fN9WoP7i8ij0_b3XlF4$pCEmwl6PSTcJvEjjvFL9J6ODUuuYkgw-w90eYxzUGxFMHCw7GK5f9Mku2KvJ5A'
+}
+*** encryption
+encrypted $29k1$j$1$-3QCtjQGLm4f1fN9WoP7i8ij0_b3XlF4$pCEmwl6PSTcJvEjjvFL9J6ODUuuYkgw-w90eYxzUGxFMHCw7GK5f9Mku2KvJ5A
+decrypted Shave and a haircut, two bits!
+```

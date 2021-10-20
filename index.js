@@ -227,7 +227,7 @@ const step2 = async (marshalled, primary, chain) => {
 
 async function main() {
   const args = process.argv.splice(2);
-  const plaintext = 'hello crypto';
+  const plaintext = 'Shave and a haircut, two bits!';
   const password = 'qwerty';
 
   // salt: stored with the user / key
