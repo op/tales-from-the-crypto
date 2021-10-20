@@ -7,10 +7,11 @@ Proof of concept; encryption based on user password.
 > TODO: improve terminology
 
  * primary   -- the primary key (with a protocol)
- * chain    -- a set of "secrets" for categories
- * category -- a category separates secrets into sub groups (eg journaling)
- * secret   -- a specific encryption key (encrypted with the primary key)
-               for a specific category, protocol and version
+ * schemes   -- a set of schemas for different categories
+ * scheme    -- a specific encryption key (encrypted with the primary key)
+                for a specific category, protocol and version
+ * category  -- a category separates different schemes into groups (eg journaling)
+
 ## PROTOCOL
 
 The protocol flow looks like this:
@@ -18,15 +19,15 @@ The protocol flow looks like this:
 1. Fetch user's salt from server
 2. Derive primary key from user password and salt
 3. Store primary key on local device (for "remember me")
-4. Generate "chain secret" for category (encrypt with random nonce and primary key)
+4. Generate scheme for category (encrypt with random nonce and primary key)
 5. Upload used nonce and encrypted key
 
 If user changes password:
 
 1. Derive new primary key
-2. Re-encrypt chain
-3. Generate new keys for all categories
-4. Upload new chain
+2. Re-encrypt all keys for all schemes
+3. Generate new scheme version with new key for all categories
+4. Upload new schemes
 
 ## Algorithms
 
@@ -62,7 +63,7 @@ data { primary: '$29k1$0$1$$-hQbC3g54I-HkqjmlxKdYmWuMwM3l0AkMf1yNYwZ1pc' }
 *** remote database
 user {
   primary: { protocol: '29k1', salt: '6v78rQHoefeqOPTubwFNNA' },
-  chain: [
+  schemes: [
     {
       key: '$29k1$j$1$eWDp4bT3uvGp8eW_fNLq4GaoEzw_axKB$jExMAJLnqMe5L10qsN4AsAg4P4hQQsH1Z2e7ZVwApxef76ra57GWGHDbEynMn4TF',
       createdAt: '2021-10-20T20:57:58.878Z'

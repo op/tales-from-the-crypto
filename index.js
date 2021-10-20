@@ -102,16 +102,16 @@ const decrypt = async (ciphertext, nonce, { protocol, key }) => {
   );
 };
 
-// createChainSecret generates a new encryption key and encrypts it
-// using the primary key, and finally wraps it with nonce, protocol
-// version, key version and the category which this key is used for.
+// generateScheme generates a new scheme.
 //
-// The encryption key is encrypted using the primary key. Once encrypted,
-// it is referred to as "secret".
-const createChainSecret = async (primary, category, version) => {
+// A scheme contains a newly generated nonce, newly generated encryption key
+// together with protocol version, key version and category.
+//
+// The encryption key is encrypted using the primary key.
+const generateScheme = async (primary, category, version) => {
   const nonce = await generateNonce();
   const key = await generateKey();
-  // TODO: do we gain anything by encrypting "chain nonce" with primary key
+  // TODO: do we gain anything by encrypting nonce with primary key
   return {
     protocol: PROTOCOL_VERSION_1,
     version,
@@ -122,9 +122,9 @@ const createChainSecret = async (primary, category, version) => {
   };
 };
 
-// decryptChainSecret decrypts a chain secret using the primary key.
-const decryptChainSecret = async (primary, chainSecret) => {
-  const { encryptedKey, nonce, ...rest } = chainSecret;
+// decryptScheme decrypts a scheme using the primary key.
+const decryptScheme = async (primary, scheme) => {
+  const { encryptedKey, nonce, ...rest } = scheme;
   return {
     ...rest,
     key: await decrypt(encryptedKey, nonce, primary),
@@ -132,21 +132,23 @@ const decryptChainSecret = async (primary, chainSecret) => {
   };
 };
 
-// findChainSecret returns the latest encryption key for a specific
-// category.
-const findChainSecret = (chain, category, protocol, version) =>
-  chain.find(
-    (item) =>
-      item.category === category &&
-      (protocol === undefined || item.protocol === protocol) &&
-      (version === undefined || item.version === version),
+// findScheme returns the latest encryption key for a specific category and
+// optionally a specific protocol version and/or key version.
+const findScheme = (schemes, category, protocol, version) =>
+  schemes.find(
+    (scheme) =>
+      scheme.category === category &&
+      (protocol === undefined || scheme.protocol === protocol) &&
+      (version === undefined || scheme.version === version),
   );
 
-const serializeKeyChain = (chain) =>
-  chain.map(({ encryptedKey, nonce, createdAt, ...key }) => ({
+const serializeSchemes = (schemes) =>
+  schemes.map(serializeScheme);
+
+const serializeScheme = ({ encryptedKey, nonce, createdAt, ...key }) => ({
     key: createCipherPrefix(key, nonce) + sodium.to_base64(encryptedKey),
     createdAt,
-  }));
+  });
 
 const serializePrimaryKey = ({ protocol, version, key }) =>
   createCipherPrefix(
@@ -165,8 +167,8 @@ const serializePrimaryKey = ({ protocol, version, key }) =>
 const createCipherPrefix = ({ protocol, category, version }, nonce) =>
   ['', protocol, category, version, sodium.to_base64(nonce), ''].join('$');
 
-const marshallEncrypted = (chainSecret, nonce, ciphertext) =>
-  createCipherPrefix(chainSecret, nonce) + sodium.to_base64(ciphertext);
+const marshallEncrypted = (scheme, nonce, ciphertext) =>
+  createCipherPrefix(scheme, nonce) + sodium.to_base64(ciphertext);
 
 const unmarshallEncrypted = (value) => {
   const [
@@ -190,20 +192,23 @@ const unmarshallEncrypted = (value) => {
 };
 
 // step1 is an example of how to encrypt things
-const step1 = async (plaintext, primary, chain, category) => {
-  const secret = findChainSecret(chain, CATEGORY_JOURNALING);
+const step1 = async (plaintext, primary, schemes, category) => {
+  const scheme = findScheme(schemes, CATEGORY_JOURNALING);
+  if (!scheme) {
+    throw new Error('Unknown encryption scheme');
+  }
 
   const nonce = await generateNonce();
   const encrypted = await encrypt(
     plaintext,
     nonce,
-    await decryptChainSecret(primary, secret),
+    await decryptScheme(primary, scheme),
   );
-  return marshallEncrypted(secret, nonce, encrypted);
+  return marshallEncrypted(scheme, nonce, encrypted);
 };
 
 // step2 is an example of how to decrypt things
-const step2 = async (marshalled, primary, chain) => {
+const step2 = async (marshalled, primary, schemes) => {
   const {
     protocol,
     category,
@@ -212,15 +217,15 @@ const step2 = async (marshalled, primary, chain) => {
     ciphertext,
   } = unmarshallEncrypted(marshalled);
 
-  const secret = findChainSecret(chain, category, protocol, version);
-  if (!secret) {
-    throw new Error('Unknown encryption key');
+  const scheme = findScheme(schemes, category, protocol, version);
+  if (!scheme) {
+    throw new Error('Unknown encryption scheme');
   }
 
   const bytes = await decrypt(
     ciphertext,
     nonce,
-    await decryptChainSecret(primary, secret),
+    await decryptScheme(primary, scheme),
   );
   return sodium.to_string(bytes);
 };
@@ -241,8 +246,8 @@ async function main() {
   // TODO: use salt to obfuscate primary key stored in local storage?
   const primary = {
     protocol: PROTOCOL_VERSION_1,
-    version: 1,
     category: CATEGORY_PRIMARY,
+    version: 1,
     key: await deriveKeyFromPassword(password, salt),
   };
 
@@ -251,7 +256,7 @@ async function main() {
     primary: serializePrimaryKey(primary),
   });
 
-  // chain contains all content encryption secrets.
+  // schemes contains all encryption schemes.
   //
   // This will be stored on a "user" object.
   //
@@ -259,17 +264,17 @@ async function main() {
   // handles that for us.)
   //
   // This need to be sorted on version and / or creation date.
-  const chain = [await createChainSecret(primary, CATEGORY_JOURNALING, 1)];
+  const schemes = [await generateScheme(primary, CATEGORY_JOURNALING, 1)];
 
-  const encrypted = await step1(plaintext, primary, chain, CATEGORY_JOURNALING);
-  const decrypted = await step2(encrypted, primary, chain);
+  const encrypted = await step1(plaintext, primary, schemes, CATEGORY_JOURNALING);
+  const decrypted = await step2(encrypted, primary, schemes);
 
   // this is the data that will be stored in the database
   console.log('*** remote database');
   // user database
   console.log('user', {
     primary: { protocol: PROTOCOL_VERSION_1, salt: sodium.to_base64(salt) },
-    chain: serializeKeyChain(chain),
+    schemes: serializeSchemes(schemes),
   });
   // example "entries" collection, can really be anything
   console.log('entries', {
