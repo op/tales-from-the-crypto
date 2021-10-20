@@ -8,7 +8,7 @@ Proof of concept; encryption based on user password.
 
  * primary   -- the primary key (with a protocol)
  * chain    -- a set of "secrets" for categories
- * category -- a category separates secrets into sub groups
+ * category -- a category separates secrets into sub groups (eg journaling)
  * secret   -- a specific encryption key (encrypted with the primary key)
                for a specific category, protocol and version
 ## PROTOCOL
@@ -34,6 +34,9 @@ Alternative algorithms:
 * Values can be copied / moved from one "database entry" to another.
    There is nothing in the "additional" data that binds it to a
    specific entry, only to a specific protocol version.
+
+* The only real category right now is journaling. Is it overkill to think about
+  it?
 
 ## Example
 
