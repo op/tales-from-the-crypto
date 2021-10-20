@@ -21,7 +21,15 @@ The protocol flow looks like this:
 4. Generate "chain secret" for category (encrypt with random nonce and primary key)
 5. Upload used nonce and encrypted key
 
-Used algorithm:
+If user changes password:
+
+1. Derive new primary key
+2. Re-encrypt chain
+3. Generate new keys for all categories
+4. Upload new chain
+
+## Algorithms
+
 1. Key derivation: argon2id
 2. Encryption: XChaCha20 Poly1305 IETF
 
@@ -37,6 +45,12 @@ Alternative algorithms:
 
 * The only real category right now is journaling. Is it overkill to think about
   it?
+
+* If password is changed because previous password was stolen, current
+  encryption keys might be at risk.
+
+* Encrypted keys are stored on server. Alternative would be to not store keys
+  at all. This would force us to re-encrypt all data on password change.
 
 ## Example
 
