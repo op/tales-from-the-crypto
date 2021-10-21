@@ -45,7 +45,7 @@ const Category = {
 // https://doc.libsodium.org/password_hashing/default_phf
 const deriveKeyFromPassword = async (password, salt) => {
   await sodium.ready;
-  const start = performance.now();
+  const start = Date.now();
   const key = sodium.crypto_pwhash(
     32, // 256-bit key
     password,
@@ -54,7 +54,7 @@ const deriveKeyFromPassword = async (password, salt) => {
     Protocol1.memoryLimit,
     sodium.crypto_pwhash_ALG_ARGON2ID13,
   );
-  const time = ((performance.now() - start) / 1e3).toPrecision(3);
+  const time = ((Date.now() - start) / 1e3).toPrecision(3);
   console.log(`Generated primary key in ${time}s.`);
   return key;
 };
