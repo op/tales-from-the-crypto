@@ -5,31 +5,40 @@
 
 const sodium = require('libsodium-wrappers');
 
-// OPS_LIMIT is sodium.crypto_pwhash_OPSLIMIT_MODERATE
-//
-// The constant sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE is 2 but it
-// seem OPSLIMIT_MODERATE work fine on my machine. We can decrease this
-// if it's unbearable on older devices.
-//
-// Based on the documentation here[1], it's better to keep this
-// a 3 and lower memory limit.
-// [1] https://doc.libsodium.org/password_hashing/default_phf
-const OPS_LIMIT = 3;
+const Protocol1 = {
+  // version is the version string used when marshalling ciphertext to know
+  // which protocol version was used.
+  version: '29k1',
 
-// MEM_LIMIT is sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE.
-const MEM_LIMIT = 64 * 1024 * 1024;
+  // operationLimit represents a maximum amount of computations to perform.
+  // Raising this number will make the function require more CPU cycles to
+  // compute a key. At time of choosing, the value was found in
+  // sodium.crypto_pwhash_OPSLIMIT_MODERATE.
+  //
+  // The constant sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE is 2 but it seem
+  // OPSLIMIT_MODERATE work fine on my machine. We can decrease this if it's
+  // unbearable on older devices.
+  //
+  // Based on the documentation here[1], it's better to keep this a 3 and lower
+  // memory limit.
+  // [1] https://doc.libsodium.org/password_hashing/default_phf
+  operationLimit: 3,
 
-// PROTOCOL_VERSION_1 is prepended to all ciphertext and keys will also
-// have this tied to it. It dictates the algorithm used together with
-// any knobs for it like operation and memory limits.
-const PROTOCOL_VERSION_1 = '29k1';
+  // memoryLimit is the maximum amount of RAM that the function will use, in
+  // bytes. At time of choosing, the value was found in
+  // sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE.
+  memoryLimit: 64 * 1024 * 1024,
+};
 
-const CATEGORY_PRIMARY = '0';
+const Category = {
+  // primary is used for the primary key
+  primary: '0',
 
-// CATEGORY_JOURNALING is an example cateogry. Ciphertext will contain
-// the category to allow us to have different keys for different
-// purposes.
-const CATEGORY_JOURNALING = 'j';
+  // journaling is an example cateogry. Ciphertext will contain
+  // the category to allow us to have different keys for different
+  // purposes.
+  journaling: 'j',
+};
 
 // deriveKeyFromPassword derives a 256-bit key from a password and a
 // 128-bit salt using argon2id.
@@ -41,8 +50,8 @@ const deriveKeyFromPassword = async (password, salt) => {
     32, // 256-bit key
     password,
     salt,
-    OPS_LIMIT,
-    MEM_LIMIT,
+    Protocol1.operationLimit,
+    Protocol1.memoryLimit,
     sodium.crypto_pwhash_ALG_ARGON2ID13,
   );
   const time = ((performance.now() - start) / 1e3).toPrecision(3);
@@ -72,7 +81,7 @@ const generateNonce = async () => {
 // confidential. An authentication tag is automatically added to it.
 const encrypt = async (plaintext, nonce, { protocol, key }) => {
   await sodium.ready;
-  if (protocol !== PROTOCOL_VERSION_1) {
+  if (protocol !== Protocol1.version) {
     throw new Error('Unsupported protocol');
   }
   const additional = protocol;
@@ -89,7 +98,7 @@ const encrypt = async (plaintext, nonce, { protocol, key }) => {
 // make sure it hasn't been tampered with.
 const decrypt = async (ciphertext, nonce, { protocol, key }) => {
   await sodium.ready;
-  if (protocol !== PROTOCOL_VERSION_1) {
+  if (protocol !== Protocol1.version) {
     throw new Error('Unsupported protocol');
   }
   const additional = protocol;
@@ -113,7 +122,7 @@ const generateScheme = async (primary, category, version) => {
   const key = await generateKey();
   // TODO: do we gain anything by encrypting nonce with primary key
   return {
-    protocol: PROTOCOL_VERSION_1,
+    protocol: Protocol1.version,
     version,
     category,
     nonce,
@@ -151,7 +160,7 @@ const serializeScheme = ({ encryptedKey, nonce, createdAt, ...key }) => ({
 
 const serializePrimaryKey = ({ protocol, version, key }) =>
   cipherPrefix(
-    { protocol, category: CATEGORY_PRIMARY, version },
+    { protocol, category: Category.primary, version },
     '', // primary key does not have a nonce
   ) + sodium.to_base64(key);
 
@@ -174,7 +183,7 @@ const unmarshallEncrypted = (value) => {
     nonce,
     ciphertext,
   ] = value.split('$', 6);
-  if (preamble !== '' || protocol !== PROTOCOL_VERSION_1) {
+  if (preamble !== '' || protocol !== Protocol1.version) {
     throw new Error('Unsupported protocol');
   }
   return {
@@ -188,7 +197,7 @@ const unmarshallEncrypted = (value) => {
 
 // step1 is an example of how to encrypt things
 const step1 = async (plaintext, primary, schemes, category) => {
-  const scheme = findScheme(schemes, CATEGORY_JOURNALING);
+  const scheme = findScheme(schemes, Category.journaling);
   if (!scheme) {
     throw new Error('Unknown encryption scheme');
   }
@@ -232,7 +241,14 @@ async function main() {
 
   // salt: stored with the user / key
   await sodium.ready;
-  const salt = args[0] ? sodium.from_base64(args[0]) : await generateSalt();
+  const salt = await (async () => {
+    if (args[0]) {
+      await sodium.ready;
+      return sodium.from_base64(args[0]);
+    } else {
+      return generateSalt();
+    }
+  })();
 
   // primary key derived from password. Never leaves the user's device
   // and will be stored as secure as possible:
@@ -240,8 +256,8 @@ async function main() {
   // - Android Keystore (where available)
   // TODO: use salt to obfuscate primary key stored in local storage?
   const primary = {
-    protocol: PROTOCOL_VERSION_1,
-    category: CATEGORY_PRIMARY,
+    protocol: Protocol1.version,
+    category: Category.primary,
     version: 1,
     key: await deriveKeyFromPassword(password, salt),
   };
@@ -259,13 +275,13 @@ async function main() {
   // handles that for us.)
   //
   // This need to be sorted on version and / or creation date.
-  const schemes = [await generateScheme(primary, CATEGORY_JOURNALING, 1)];
+  const schemes = [await generateScheme(primary, Category.journaling, 1)];
 
   const encrypted = await step1(
     plaintext,
     primary,
     schemes,
-    CATEGORY_JOURNALING,
+    Category.journaling,
   );
   const decrypted = await step2(encrypted, primary, schemes);
 
@@ -273,7 +289,7 @@ async function main() {
   console.log('*** remote database');
   // user database
   console.log('user', {
-    primary: { protocol: PROTOCOL_VERSION_1, salt: sodium.to_base64(salt) },
+    primary: { protocol: Protocol1.version, salt: sodium.to_base64(salt) },
     schemes: serializeSchemes(schemes),
   });
   // example "entries" collection, can really be anything
