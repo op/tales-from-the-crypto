@@ -113,8 +113,11 @@ const decrypt = async (ciphertext, nonce, { protocol, key }) => {
 
 // generateScheme generates a new scheme.
 //
-// A scheme contains a newly generated nonce, newly generated encryption key
-// together with protocol version, key version and category.
+// An encryption scheme is made up with;
+//   - protocol     -- protocol version this key is for
+//   - version      -- sequence number for the key
+//   - category     -- the data category or group it belongs to
+//   - encryptedKey -- data encryption key (encrypted)
 //
 // The encryption key is encrypted using the primary key.
 const generateScheme = async (primary, category, version) => {
@@ -131,7 +134,7 @@ const generateScheme = async (primary, category, version) => {
   };
 };
 
-// decryptScheme decrypts a scheme using the primary key.
+// decryptScheme decrypts the data encryption key for a scheme.
 const decryptScheme = async (primary, scheme) => {
   const { encryptedKey, nonce, ...rest } = scheme;
   return {
@@ -141,8 +144,11 @@ const decryptScheme = async (primary, scheme) => {
   };
 };
 
-// findScheme returns the latest encryption key for a specific category and
-// optionally a specific protocol version and/or key version.
+// findScheme returns the most suitable encryption scheme given a data category
+// and optionally a specific protocol version and/or key version.
+//
+// When decrypting data make sure to specify both the protocol and version to
+// find the specific key used when encrypting the data.
 const findScheme = (schemes, category, protocol, version) =>
   schemes.find(
     (scheme) =>
@@ -267,7 +273,7 @@ async function main() {
     primary: serializePrimaryKey(primary),
   });
 
-  // schemes contains all encryption schemes.
+  // schemes contains all data encryption schemes.
   //
   // This will be stored on a "user" object.
   //
