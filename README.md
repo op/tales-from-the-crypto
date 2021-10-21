@@ -7,7 +7,7 @@ Proof of concept; encryption based on user password.
 > TODO: improve terminology
 
  * primary   -- the primary key (with a protocol)
- * schemes   -- a set of schemas for different categories
+ * schemes   -- a set of schemes for different categories
  * scheme    -- a specific encryption key (encrypted with the primary key)
                 for a specific category, protocol and version
  * category  -- a category separates different schemes into groups (eg journaling)
